@@ -31,3 +31,12 @@ env/
 # .vscode
 .vscode/
 .coverage
+
+# project: server/bench logs stay local
+logs/
+
+# project: raw results and golden outputs must be tracked despite *.json/*.jsonl above
+!results/**/*.json
+!results/**/*.jsonl
+!tests/golden/**/*.json
+!tests/golden/**/*.jsonl
