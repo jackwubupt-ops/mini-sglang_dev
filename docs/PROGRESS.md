@@ -105,3 +105,15 @@ index stops at 0.1.6.post1; torch cu118 wheels stop at 2.7.1; flashinfer 0.5.3 n
 nvidia-cutlass-dsl), and a CUDA 12 runtime needs driver >= 525.60.13 (forward-compat packages do not
 cover GeForce). Upgrading the driver needs the administrator (no sudo for us). Nothing installed.
 Disk: 54G free on a shared 99%-full filesystem; serve.sh/run_offline.sh need >= 20 GiB free.
+
+## 2026-10-20 — CUDA 11.8 compatibility plan (not executed)
+
+docs/cu118-compat-plan.md: checkpoints CP0–CP8 for trying Mini-SGLang on driver 520.61.05 without a
+driver change; scripts/compat/ (cuda_compat_probe.py, torch_check.py, flashinfer_check.py, jit_gate.py,
+offline_smoke.py). Findings from the source at 9a91cfa: for Qwen3 dense with `--attention-backend fi`,
+sgl_kernel, Triton and quack-kernels are not needed (lazy imports in the fa backend and MoE only);
+FlashInfer (attention, sampling, norm, activation, RoPE) and Mini-SGLang's own tvm-ffi kernels are.
+Those kernels are compiled with `-std=c++20` and use std::source_location/std::span/concepts/bit_cast;
+nvcc 11.8 has no C++20 mode, so unmodified code is expected to fail at CP3/CP6. FlashInfer 0.5.3 JIT
+with nvcc 11.8 is untested (CP5). CUDA 12 needs driver >= 525.60.13; forward compat (CP2) is expected
+to return error 804 on GeForce. Scripts compile locally; none has run on a GPU.
