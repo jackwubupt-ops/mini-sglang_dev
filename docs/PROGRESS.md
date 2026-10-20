@@ -60,3 +60,25 @@ clone, fast-forward update, refusal of a corrupted bundle, a rewritten (non-ff) 
 outside transfer/; tests/tooling 12 passed. Not verified: every PowerShell block (no PowerShell
 here), anything on ps, the wheelhouse and model fallbacks.
 Open question: whether ps can reach Conda/PyPI/Hugging Face (runbook step 1 decides).
+
+## 2026-10-20 — GitHub through the SSH RemoteForward tunnel (preferred), bundles as fallback
+
+User set up `RemoteForward 127.0.0.1:17897 127.0.0.1:7897` (Windows Clash Verge mixed port) on the
+Remote-SSH host; `curl -I -x http://127.0.0.1:17897 https://github.com` works on ps, plain `git clone`
+still fails. Changes (tooling, merged into instr):
+- scripts/check_gh_tunnel.sh (read-only): listener on 127.0.0.1:17897 must belong to the user's own
+  sshd/sshd-session process, GitHub must answer through the proxy, `git ls-remote` must work.
+- scripts/sync_from_github.sh: tunnel check, origin == fork URL, clean tree, fetch with
+  `-c http.proxy=...` (fsck on), baseline-v1 fetched without overwrite, fast-forward only for
+  upstream/tooling/instr, upstream and baseline-v1 must be 9a91cfa; DRY_RUN=1 checks only.
+- docs/week1-server.md: new section G (G0 Windows SSH config, G1 inline tunnel check, G2 first clone
+  through the tunnel, G3 updates, one-off `pull --ff-only` with guards, adding `origin` to a bundle
+  checkout); T and step 2 marked as fallback. CLAUDE.md deployment rule rewritten accordingly.
+- Found uncommitted changes in the working tree that reverted the bundle commit (f3fdcd5) and deleted
+  scripts/sync_from_bundle.sh; no session was running. Kept as `git stash` entry
+  "uncommitted revert of bundle deploy" (not applied, not dropped) for the user to review.
+Verified locally (stubs for ss/ps/curl/id, a bare repo standing in for the fork via url.insteadOf):
+shellcheck clean; sync_from_github.sh fast-forwards, is idempotent, and refuses a rewritten branch, a
+moved baseline-v1 tag, a dirty tree, a wrong or missing origin, a missing listener, another user's
+listener and a dead proxy; the inline G1 check gives the same verdicts; all 38 runbook bash blocks parse.
+Not verified: anything on ps (real ss -p output for the sshd listener, the proxy, the G2 clone).

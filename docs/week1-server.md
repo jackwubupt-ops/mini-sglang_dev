@@ -1,26 +1,40 @@
-# Week 1 server runbook — Windows-mediated deployment
+# Week 1 server runbook — GitHub through the SSH tunnel, bundles as fallback
 
-Follows PLAN 4.5 and 17, adapted to two facts on 2026-10-20:
-the project root on `ps` is `/home/xwc/vllm`, and **`ps` cannot complete HTTPS/TLS
-connections to GitHub** (`gnutls_handshake() failed`; `curl` gets `200 Connection
-established` from a proxy, then `unexpected eof`). Cause not confirmed. Therefore:
+Follows PLAN 4.5 and 17, adapted to the facts of 2026-10-20: the project root on `ps` is
+`/home/xwc/vllm`, and **direct HTTPS from `ps` to GitHub fails** (`gnutls_handshake() failed`).
+The user's Windows machine now carries GitHub traffic for `ps` through an SSH RemoteForward:
 
 ```
-Mac (Claude Code / Codex, develop, commit) --git push--> GitHub fork
-GitHub fork --git fetch--> Windows (bare mirror) --git bundle + sha256--> scp --> ps:/home/xwc/vllm/transfer
-ps: verify sha256 + bundle heads + git bundle verify + fsck --> clone (first time) or scripts/sync_from_bundle.sh
-ps: run jobs --> /home/xwc/vllm/runs --> tar + sha256 in /home/xwc/vllm/outbox --> scp --> Windows --> Mac
+ps:127.0.0.1:17897 --(SSH RemoteForward, VS Code Remote-SSH session)--> Windows 127.0.0.1:7897 (Clash Verge mixed port)
 ```
 
-Rules: `ps` never runs `git fetch`/`pull`/`clone` against GitHub; nothing disables TLS
-verification; no AI agent and no agent session files on `ps`; never touch other users' files;
-nothing on `ps` overwrites an existing file (transfers are timestamped and checked first).
+**Preferred:** `ps` clones and fetches the fork through that tunnel (section G), with the proxy
+given on every command (`git -c http.proxy=http://127.0.0.1:17897 ...`).
+**Fallback:** git bundles built on Windows and copied with scp (sections T and 2), used whenever
+the tunnel check (G1) fails.
+
+Rules:
+- Every GitHub HTTPS command on `ps` passes `-c http.proxy=http://127.0.0.1:17897` explicitly.
+  Plain `git clone/fetch/pull` does **not** use the tunnel. Never store the proxy with
+  `git config` (global, system or repo) or in shell startup files.
+- Never disable TLS verification (`http.sslVerify`, `GIT_SSL_NO_VERIFY`, `curl -k`).
+- Verify the tunnel (G1) before relying on it. If it fails, stop and report the output. Do not
+  retry direct GitHub access; use the bundle fallback if you need code before the tunnel is fixed.
+- Only fast-forward (`pull --ff-only`, `merge --ff-only`). Never `pull --force`, `reset --hard`,
+  `checkout -f`, `clean`, or anything else that overwrites uncommitted work. Commit nothing on `ps`.
+- No AI agent and no agent session files on `ps`. Never touch other users' files. Nothing on
+  `ps` overwrites an existing file (transfers are timestamped and checked first).
+- The tunnel port 127.0.0.1:17897 is reachable by every local user of `ps` while you are
+  connected. G1 checks that your own sshd holds it. TLS still protects the content.
 
 Notation: **[Mac]** zsh on your Mac, **[Win]** Windows PowerShell (5.1 or 7), **[ps]** bash in the
 VS Code Remote-SSH terminal on `ps` as `xwc`. PowerShell blocks are wrapped in `. { ... }` so an
 error stops the whole block while variables like `$T` stay set for the next block; keep one
 PowerShell window open for a whole transfer. Keep one `ps` terminal open too (variables
 `GPU`, `P`, `MODEL`, `SFLAGS` are set once and reused).
+
+**Order:** 0 → 1 → G1 → G2 (if G1 fails: T → 2) → 3 → 4 → 5 … 11. Later code updates: G3
+(fallback: T2–T4 + `scripts/sync_from_bundle.sh`).
 
 ---
 
@@ -38,13 +52,70 @@ git -C ~/mini-sglang push fork upstream tooling instr baseline-v1
 ```bash
 git -C ~/mini-sglang for-each-ref --format='%(objectname) %(refname)' refs/heads/upstream refs/heads/tooling refs/heads/instr refs/tags/baseline-v1
 ```
-Keep this output: Windows (step T2) and `ps` (step 2) print the same four lines, and they must match.
+Keep this output: `ps` (G2 or G3; fallback: Windows T2 and `ps` step 2) prints the same four lines, and they must match.
 
 ---
 
-## T. [Win] Build a verified bundle and copy it to `ps`
+## G. [ps] GitHub through the SSH RemoteForward tunnel (preferred)
 
-Run T0 and T1 once. Run T2–T4 for every transfer (first checkout and every later update).
+**G0. [Win] SSH host entry** (in `%USERPROFILE%\.ssh\config`, the host VS Code Remote-SSH uses):
+
+```
+RemoteForward 127.0.0.1:17897 127.0.0.1:7897
+ExitOnForwardFailure yes
+ServerAliveInterval 30
+ServerAliveCountMax 3
+```
+Clash Verge must be running with its mixed port on `127.0.0.1:7897`. After changing the config,
+close and reopen the Remote-SSH window. With `ExitOnForwardFailure yes` the connection fails
+(instead of silently connecting without the tunnel) if 17897 is already taken on `ps`.
+
+**G1. Verify the tunnel** (read-only; run it at the start of every session that needs GitHub).
+This inline check is the same as `scripts/check_gh_tunnel.sh`, which you can use once the repo
+exists:
+
+```bash
+if [ "$(id -un)" != xwc ]; then echo "STOP: not xwc"; else L=$(ss -ltnpH 'sport = :17897' | head -n 1); TP=$(sed -n 's/.*pid=\([0-9]*\).*/\1/p' <<< "$L" | head -n 1); echo "listener: ${L:-none}"; if [ -z "$TP" ] || [ "$(ps -o user= -p "$TP" | tr -d ' ')" != xwc ] || ! ps -o comm= -p "$TP" | grep -qx 'sshd\|sshd-session'; then echo "STOP: 127.0.0.1:17897 is not held by your sshd; reconnect Remote-SSH, do not use the port"; elif ! curl -sS -o /dev/null -I --connect-timeout 10 --max-time 20 -x http://127.0.0.1:17897 -w 'github via tunnel: %{http_code}\n' https://github.com; then echo "STOP: proxy not answering; check Clash Verge on Windows"; elif ! git -c http.proxy=http://127.0.0.1:17897 ls-remote https://github.com/jackwubupt-ops/mini-sglang_dev.git HEAD; then echo "STOP: git ls-remote through the tunnel failed"; else echo "tunnel ok"; fi; fi
+```
+Expected: a `LISTEN ... 127.0.0.1:17897 ... users:(("sshd",pid=...))` line (or `sshd-session`),
+`github via tunnel: 200`, one `<sha> HEAD` line, `tunnel ok`. Any `STOP`: report the output to
+me and use the bundle fallback (T, 2) if you need code now. Do not retry plain `git clone`.
+
+**G2. First checkout through the tunnel** (once; only after G1 printed `tunnel ok`):
+
+```bash
+if [ "$(id -un)" != xwc ] || [ ! -O /home/xwc/vllm ]; then echo "STOP: not xwc or /home/xwc/vllm not ours"; elif [ -e /home/xwc/vllm/mini-sglang_dev ]; then ls -ld /home/xwc/vllm/mini-sglang_dev; echo "STOP: repo exists; inspect it, then update with scripts/sync_from_github.sh"; else git -c http.proxy=http://127.0.0.1:17897 -c transfer.fsckObjects=true clone -b tooling https://github.com/jackwubupt-ops/mini-sglang_dev.git /home/xwc/vllm/mini-sglang_dev && cd /home/xwc/vllm/mini-sglang_dev && git branch --track upstream origin/upstream && git branch --track instr origin/instr && git -c http.proxy=http://127.0.0.1:17897 fetch --no-tags origin 'refs/tags/baseline-v1:refs/tags/baseline-v1' && { git config --get http.proxy || echo "no stored proxy (good)"; } && [ "$(git rev-parse upstream)" = 9a91cfafe754aa85daee49998176275667eb58f2 ] && [ "$(git rev-parse 'baseline-v1^{commit}')" = 9a91cfafe754aa85daee49998176275667eb58f2 ] && echo "upstream and baseline-v1 at 9a91cfa" && git for-each-ref --format='%(objectname) %(refname)' refs/heads/upstream refs/heads/tooling refs/heads/instr refs/tags/baseline-v1 && git status --short --branch; fi
+```
+Expected: the clone, `no stored proxy (good)`,
+`upstream and baseline-v1 at 9a91cfa`, four lines that match the Mac output of step 0, and
+`## tooling...origin/tooling`. Then continue at step 3.
+
+**G3. Later updates** (after you push from the Mac). Run from the repo with the env active. It
+re-runs G1, checks that `origin` is the fork and the tree is clean, fetches through the tunnel,
+fast-forwards `upstream`, `tooling` and `instr` only, and refuses if baseline-v1 would move:
+
+```bash
+cd /home/xwc/vllm/mini-sglang_dev && DRY_RUN=1 scripts/sync_from_github.sh && scripts/sync_from_github.sh
+```
+
+For a one-off update of the current branch only, use the same guards by hand:
+
+```bash
+cd /home/xwc/vllm/mini-sglang_dev && if [ -n "$(git status --porcelain)" ]; then echo "STOP: uncommitted changes"; elif [ "$(git config --get remote.origin.url)" != https://github.com/jackwubupt-ops/mini-sglang_dev.git ]; then echo "STOP: origin is not the fork"; elif scripts/check_gh_tunnel.sh; then git branch --show-current && git -c http.proxy=http://127.0.0.1:17897 pull --ff-only; fi
+```
+
+**If the repo came from a bundle** (it has the remote `bundle` and no `origin`), add the fork
+once, without changing anything else, then use G3:
+
+```bash
+cd /home/xwc/vllm/mini-sglang_dev && if git remote | grep -qx origin; then echo "origin exists: $(git config --get remote.origin.url)"; else git remote add origin https://github.com/jackwubupt-ops/mini-sglang_dev.git && git remote -v; fi
+```
+
+---
+
+## T. Fallback [Win]: build a verified bundle and copy it to `ps`
+
+Use T only when G1 fails. Run T0 and T1 once, then T2–T4 for every transfer (first checkout and every later update).
 
 **T0. Tools and SSH host.** Use the same SSH host you use for VS Code Remote-SSH (an alias from
 `~\.ssh\config`, or `xwc@<server address>`).
@@ -146,7 +217,7 @@ A `200` (or `301/302`) means reachable; `000` or a TLS error means blocked. Use 
 Conda blocked → stop at step 3 and tell me; pip blocked → use step 4b; Hugging Face blocked →
 use step 4c.
 
-## 2. [ps] First checkout from the bundle (once)
+## 2. Fallback [ps]: first checkout from the bundle (once; skip if G2 succeeded)
 
 Set `B` to the path T4 printed, then:
 

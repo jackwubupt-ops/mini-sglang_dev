@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/sync_from_bundle.sh BUNDLE
 # Updates this server checkout from a git bundle copied in from the Windows machine
-# (ps has no GitHub access). Never fetches from the network.
+# Fallback for when the SSH tunnel (scripts/sync_from_github.sh) is unavailable. Never fetches from the network.
 #   BUNDLE must be /home/xwc/vllm/transfer/mini-sglang_dev-<stamp>.bundle, owned by xwc, with
 #   BUNDLE.sha256 (sha256sum format) and BUNDLE.refs (git for-each-ref "<sha> <ref>" lines)
 #   written next to it on Windows.

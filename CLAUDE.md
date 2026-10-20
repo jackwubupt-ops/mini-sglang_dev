@@ -3,9 +3,15 @@ Plan: docs/PLAN.md is authoritative. Read the section named in each session prom
 Pinned baseline: branch `upstream` at 9a91cfa (tag baseline-v1). Never modify it.
 Execution: you run locally only. Never run commands on the server `ps`, never open SSH,
 never add instructions that install or launch an AI agent on the server.
-Deployment (2026-10-20): `ps` cannot reach GitHub over HTTPS. Code reaches `ps` only as a git bundle
-built on the user's Windows machine and copied with scp (docs/week1-server.md, scripts/sync_from_bundle.sh);
-never write server steps that git fetch/pull/clone from GitHub, and never disable TLS verification.
+Deployment (2026-10-20): direct HTTPS from `ps` to GitHub fails. Preferred route: the user's SSH
+RemoteForward (ps 127.0.0.1:17897 -> Windows Clash Verge 127.0.0.1:7897). Every Linux command that
+reaches GitHub over HTTPS (clone, fetch, pull, ls-remote) must pass the proxy explicitly:
+`git -c http.proxy=http://127.0.0.1:17897 ...`, after the tunnel check (docs/week1-server.md G1,
+scripts/check_gh_tunnel.sh); updates go through scripts/sync_from_github.sh. Never assume plain git uses
+the tunnel, never store a proxy in any git config or shell profile, never disable TLS verification,
+never `pull --force`/`reset --hard`/anything that overwrites uncommitted work (fast-forward only). If the
+tunnel or proxy check fails: stop and report, no retries against GitHub directly. Fallback: git bundle
+built on Windows and copied with scp (docs/week1-server.md T and 2, scripts/sync_from_bundle.sh).
 Project root on `ps`: /home/xwc/vllm (repo /home/xwc/vllm/mini-sglang_dev, runs/, cache/, transfer/, outbox/).
 Server scripts you write must follow the Shared Server Usage Policy (PLAN 4.2):
 - start with `set -euo pipefail`, run scripts/check_env.sh, then source scripts/env.sh;
