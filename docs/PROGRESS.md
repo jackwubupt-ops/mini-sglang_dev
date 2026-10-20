@@ -82,3 +82,4 @@ shellcheck clean; sync_from_github.sh fast-forwards, is idempotent, and refuses 
 moved baseline-v1 tag, a dirty tree, a wrong or missing origin, a missing listener, another user's
 listener and a dead proxy; the inline G1 check gives the same verdicts; all 38 runbook bash blocks parse.
 Not verified: anything on ps (real ss -p output for the sshd listener, the proxy, the G2 clone).
+- Later the same day: the user confirmed that revert was unintended; the stash was dropped.
