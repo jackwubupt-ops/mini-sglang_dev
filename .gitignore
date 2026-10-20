@@ -35,6 +35,25 @@ env/
 # project: server/bench logs stay local
 logs/
 
+# project: secrets, agent sessions, raw run data, caches and weights never enter Git
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+*token*.txt
+.claude/
+.codex/
+runs/
+cache/
+.cache/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.gguf
+
 # project: raw results and golden outputs must be tracked despite *.json/*.jsonl above
 !results/**/*.json
 !results/**/*.jsonl
