@@ -4,6 +4,7 @@
 
 OWNER=xwc
 MIN_FREE_GIB=20
+DATA_ROOT=/home/xwc/vllm   # repo, runs and caches live here
 DRY_RUN=${DRY_RUN:-0}
 
 die() { echo "REFUSED: $*" >&2; exit 1; }
@@ -30,13 +31,13 @@ guard_scheduler() {
 
 guard_disk() {
   local avail_kib
-  avail_kib=$(df -Pk /home/xwc 2>/dev/null | awk 'NR==2 {print $4}') || true
+  avail_kib=$(df -Pk "$DATA_ROOT" 2>/dev/null | awk 'NR==2 {print $4}') || true
   if [ -z "$avail_kib" ]; then
-    [ "$DRY_RUN" = 1 ] && { echo "DRY-RUN: /home/xwc not found, skipping disk check"; return; }
-    die "cannot read free space of /home/xwc"
+    [ "$DRY_RUN" = 1 ] && { echo "DRY-RUN: $DATA_ROOT not found, skipping disk check"; return; }
+    die "cannot read free space of $DATA_ROOT"
   fi
   [ "$avail_kib" -ge $((MIN_FREE_GIB * 1024 * 1024)) ] \
-    || die "less than ${MIN_FREE_GIB} GiB free under /home/xwc ($((avail_kib / 1024 / 1024)) GiB)"
+    || die "less than ${MIN_FREE_GIB} GiB free under $DATA_ROOT ($((avail_kib / 1024 / 1024)) GiB)"
 }
 
 # Refuses if GPU index $1 does not exist or runs a compute process of another user.
