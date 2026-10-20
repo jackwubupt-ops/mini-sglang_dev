@@ -91,3 +91,17 @@ sshd marks itself non-dumpable, so even its own user cannot read its fds and `ss
 check_gh_tunnel.sh and runbook G1 now take ownership from the socket UID (`ss -e` → `uid:N`; no
 field means root) and require it to equal `id -u`; check_gh_tunnel.sh also warns if no sshd of xwc is
 visible. Verified with stubs (own uid → ok; other uid, root, no listener → STOP); shellcheck clean.
+
+## 2026-10-20 — Deployed to ps; environment blocked by the NVIDIA driver
+
+Deployed: /home/xwc/vllm/mini-sglang_dev on `tooling` at 4952856 via the SSH tunnel; upstream, tooling,
+instr and baseline-v1 all match GitHub (user's step 6 output).
+Runbook step 1a on ps (user's output): 7 × GeForce 24 GiB (350 W, Ampere-class), driver 520.61.05,
+driver CUDA version 11.8, no nvcc, no sinfo/squeue, root filesystem 3.5T at 99% (54G free), conda 25.11.0
+(base /home/xwc/anaconda3), /home/xwc/envs/minisgl absent. GPU 6 is the only GPU with no compute process
+(8 MiB); GPU 0 has another user's 582 MiB python process; GPUs 1-5 are in use.
+BLOCKER: the pinned dependencies need CUDA 12 (sgl_kernel >= 0.3.17.post1: the sgl-project cu118 wheel
+index stops at 0.1.6.post1; torch cu118 wheels stop at 2.7.1; flashinfer 0.5.3 needs
+nvidia-cutlass-dsl), and a CUDA 12 runtime needs driver >= 525.60.13 (forward-compat packages do not
+cover GeForce). Upgrading the driver needs the administrator (no sudo for us). Nothing installed.
+Disk: 54G free on a shared 99%-full filesystem; serve.sh/run_offline.sh need >= 20 GiB free.
