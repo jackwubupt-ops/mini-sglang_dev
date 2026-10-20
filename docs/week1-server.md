@@ -72,13 +72,13 @@ close and reopen the Remote-SSH window. With `ExitOnForwardFailure yes` the conn
 
 **G1. Verify the tunnel** (read-only; run it at the start of every session that needs GitHub).
 This inline check is the same as `scripts/check_gh_tunnel.sh`, which you can use once the repo
-exists:
+exists. Ownership is checked by the socket's UID (`ss -e`): sshd hides its file descriptors, so
+`ss -p` cannot show the owning process:
 
 ```bash
-if [ "$(id -un)" != xwc ]; then echo "STOP: not xwc"; else L=$(ss -ltnpH 'sport = :17897' | head -n 1); TP=$(sed -n 's/.*pid=\([0-9]*\).*/\1/p' <<< "$L" | head -n 1); echo "listener: ${L:-none}"; if [ -z "$TP" ] || [ "$(ps -o user= -p "$TP" | tr -d ' ')" != xwc ] || ! ps -o comm= -p "$TP" | grep -qx 'sshd\|sshd-session'; then echo "STOP: 127.0.0.1:17897 is not held by your sshd; reconnect Remote-SSH, do not use the port"; elif ! curl -sS -o /dev/null -I --connect-timeout 10 --max-time 20 -x http://127.0.0.1:17897 -w 'github via tunnel: %{http_code}\n' https://github.com; then echo "STOP: proxy not answering; check Clash Verge on Windows"; elif ! git -c http.proxy=http://127.0.0.1:17897 ls-remote https://github.com/jackwubupt-ops/mini-sglang_dev.git HEAD; then echo "STOP: git ls-remote through the tunnel failed"; else echo "tunnel ok"; fi; fi
+if [ "$(id -un)" != xwc ]; then echo "STOP: not xwc"; else L=$(ss -ltneH 'sport = :17897' | head -n 1); SU=$(grep -o 'uid:[0-9]*' <<< "$L" | head -n 1 | cut -d: -f2); echo "listener: ${L:-none}"; if [ -z "$L" ]; then echo "STOP: nothing listens on 127.0.0.1:17897; reconnect Remote-SSH (RemoteForward)"; elif [ "${SU:-0}" != "$(id -u)" ]; then echo "STOP: 127.0.0.1:17897 belongs to uid ${SU:-0}, not to you (uid $(id -u)); do not use the port"; elif ! curl -sS -o /dev/null -I --connect-timeout 10 --max-time 20 -x http://127.0.0.1:17897 -w 'github via tunnel: %{http_code}\n' https://github.com; then echo "STOP: proxy not answering; check Clash Verge on Windows"; elif ! git -c http.proxy=http://127.0.0.1:17897 ls-remote https://github.com/jackwubupt-ops/mini-sglang_dev.git HEAD; then echo "STOP: git ls-remote through the tunnel failed"; else echo "tunnel ok"; fi; fi
 ```
-Expected: a `LISTEN ... 127.0.0.1:17897 ... users:(("sshd",pid=...))` line (or `sshd-session`),
-`github via tunnel: 200`, one `<sha> HEAD` line, `tunnel ok`. Any `STOP`: report the output to
+Expected: a `LISTEN ... 127.0.0.1:17897 ... uid:<your uid> ino:...` line, `github via tunnel: 200`, one `<sha> HEAD` line, `tunnel ok`. Any `STOP`: report the output to
 me and use the bundle fallback (T, 2) if you need code now. Do not retry plain `git clone`.
 
 **G2. First checkout through the tunnel** (once; only after G1 printed `tunnel ok`):
