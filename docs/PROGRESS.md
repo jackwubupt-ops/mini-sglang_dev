@@ -83,3 +83,11 @@ moved baseline-v1 tag, a dirty tree, a wrong or missing origin, a missing listen
 listener and a dead proxy; the inline G1 check gives the same verdicts; all 38 runbook bash blocks parse.
 Not verified: anything on ps (real ss -p output for the sshd listener, the proxy, the G2 clone).
 - Later the same day: the user confirmed that revert was unintended; the stash was dropped.
+
+## 2026-10-20 — Tunnel check fix: socket UID instead of pid
+
+On ps the G1 check printed a listener on 127.0.0.1:17897 without `users:((...pid=...))` and stopped:
+sshd marks itself non-dumpable, so even its own user cannot read its fds and `ss -p` shows no pid.
+check_gh_tunnel.sh and runbook G1 now take ownership from the socket UID (`ss -e` → `uid:N`; no
+field means root) and require it to equal `id -u`; check_gh_tunnel.sh also warns if no sshd of xwc is
+visible. Verified with stubs (own uid → ok; other uid, root, no listener → STOP); shellcheck clean.
