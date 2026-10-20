@@ -157,3 +157,51 @@ def test_r4_has_64_questions():
 
     qs = questions()
     assert len(qs) == 64 and len(set(qs)) == 64
+
+
+# ---- r5_judge.py and the instr decode_map logger
+
+def _r5_run(tmp_path: Path, idle_size: int, n_eos: int = 200) -> Path:
+    rd = tmp_path / "r5-run"
+    rd.mkdir()
+    results = [
+        {"i": i, "max_tokens": 64, "null_events": 2 if i < n_eos else 63, "done": True, "error": None}
+        for i in range(200)
+    ]
+    (rd / "r5_client.json").write_text(
+        json.dumps({"overlap": True, "t_start": 100.0, "t_idle": 200.0, "t_end": 230.0, "results": results})
+    )
+    log = [f"[I] tokenizer_0 MINISGL_DEBUG_DETOK_MAP t={t:.3f} size={s}" for t, s in
+           [(150.0, 37), (205.0, idle_size + 3), (210.0, idle_size), (225.0, idle_size)]]
+    (rd / "serve.log").write_text("\n".join(log) + "\n")
+    return rd
+
+
+@pytest.mark.parametrize("idle_size, n_eos, status", [(200, 200, "confirmed"), (0, 200, "not reproduced"),
+                                                      (7, 200, "inconclusive")])
+def test_r5_judge(tmp_path, idle_size, n_eos, status):
+    rd = _r5_run(tmp_path, idle_size, n_eos)
+    out = tmp_path / "R5.json"
+    r = _run("repro/r5_judge.py", rd, "--out", out)
+    assert r.returncode == 0, r.stderr
+    v = json.loads(out.read_text())
+    assert v["status"] == status and v["idle_map_size"] == idle_size and v["n_eos_terminated"] == n_eos
+
+
+def test_detok_map_logger_logs_size():
+    pytest.importorskip("torch")
+    import logging
+    import time
+
+    from minisgl.tokenizer.server import _start_detok_map_logger
+
+    class _Mgr:
+        decode_map = {1: None, 2: None}
+
+    records = []
+    log = logging.getLogger("detok-test")
+    log.addHandler(type("H", (logging.Handler,), {"emit": lambda self, r: records.append(r.getMessage())})())
+    log.setLevel(logging.INFO)
+    _start_detok_map_logger(_Mgr(), log, interval=0.05)
+    time.sleep(0.3)
+    assert any(m.startswith("MINISGL_DEBUG_DETOK_MAP t=") and m.endswith("size=2") for m in records)

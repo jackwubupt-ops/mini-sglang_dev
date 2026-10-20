@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+import threading
+import time
 from typing import List
 
 import torch
+from minisgl.env import ENV
 from minisgl.message import (
     AbortBackendMsg,
     AbortMsg,
@@ -19,6 +22,18 @@ from minisgl.message import (
     UserReply,
 )
 from minisgl.utils import ZmqPullQueue, ZmqPushQueue, init_logger, load_tokenizer
+
+
+def _start_detok_map_logger(detokenize_manager, logger, interval: float = 5.0) -> None:
+    """Debug (MINISGL_DEBUG_DETOK_MAP=1): log the decode_map size every `interval` seconds."""
+
+    def _loop() -> None:
+        while True:
+            time.sleep(interval)
+            size = len(detokenize_manager.decode_map)
+            logger.info(f"MINISGL_DEBUG_DETOK_MAP t={time.time():.3f} size={size}")
+
+    threading.Thread(target=_loop, name="detok-map-logger", daemon=True).start()
 
 
 def _unwrap_msg(msg: BaseTokenizerMsg) -> List[BaseTokenizerMsg]:
@@ -52,6 +67,9 @@ def tokenize_worker(
 
     tokenize_manager = TokenizeManager(tokenizer)
     detokenize_manager = DetokenizeManager(tokenizer)
+
+    if ENV.DEBUG_DETOK_MAP:
+        _start_detok_map_logger(detokenize_manager, logger)
 
     if ack_queue is not None:
         ack_queue.put(f"Tokenize server {tokenizer_id} is ready")

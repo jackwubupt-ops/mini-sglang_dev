@@ -69,6 +69,9 @@ class EnvClassSingleton:
     DISABLE_OVERLAP_SCHEDULING = EnvBool(False)
     PYNCCL_MAX_BUFFER_SIZE = EnvMem(1024**3)
 
+    # debug instrumentation (all off by default; behaviour-neutral when off)
+    DEBUG_DETOK_MAP = EnvBool(False)  # log len(DetokenizeManager.decode_map) every 5 s (R5)
+
     def __new__(cls):
         # single instance
         if cls._instance is None:
