@@ -3,6 +3,10 @@ Plan: docs/PLAN.md is authoritative. Read the section named in each session prom
 Pinned baseline: branch `upstream` at 9a91cfa (tag baseline-v1). Never modify it.
 Execution: you run locally only. Never run commands on the server `ps`, never open SSH,
 never add instructions that install or launch an AI agent on the server.
+Deployment (2026-10-20): `ps` cannot reach GitHub over HTTPS. Code reaches `ps` only as a git bundle
+built on the user's Windows machine and copied with scp (docs/week1-server.md, scripts/sync_from_bundle.sh);
+never write server steps that git fetch/pull/clone from GitHub, and never disable TLS verification.
+Project root on `ps`: /home/xwc/vllm (repo /home/xwc/vllm/mini-sglang_dev, runs/, cache/, transfer/, outbox/).
 Server scripts you write must follow the Shared Server Usage Policy (PLAN 4.2):
 - start with `set -euo pipefail`, run scripts/check_env.sh, then source scripts/env.sh;
 - no sudo, no system-wide installs, no changes to Conda base, drivers or CUDA;
