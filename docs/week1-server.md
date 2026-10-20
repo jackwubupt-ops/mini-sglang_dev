@@ -4,7 +4,7 @@ Follows PLAN 4.5 and 17. Claude Code wrote these scripts locally; it never runs 
 Replace `<GPU>` with an index that `scripts/pick_gpu.sh` lists as a candidate, and `<P>` with a
 port where both P and P+1 are free (serve.sh checks both). Use the same `<GPU>` for every run.
 Before each GPU job: no scheduler (or follow it), GPU checked, own repo/env, paths under
-`/home/xwc`, SHA recorded (the scripts write `run_meta.txt`), and you know the run's PGID
+`/home/xwc/vllm`, SHA recorded (the scripts write `run_meta.txt`), and you know the run's PGID
 (printed by the script; stop only with `scripts/stop_server.sh RUN_ID`).
 
 Every script supports `DRY_RUN=1` (checks and prints, launches nothing). Try it first, e.g.
@@ -31,24 +31,40 @@ whoami; hostname; pwd; echo "$HOME"; ls -ld "$HOME"
 nvidia-smi
 command -v sinfo; command -v squeue
 command -v nvcc && nvcc --version
-df -h /home/xwc
+df -h /home/xwc /home/xwc/vllm
 ```
 
-Expected: `xwc`, `ps`, `/home/xwc` owned by `xwc`; no output from the `sinfo`/`squeue` line
+Expected: `xwc`, `ps`, `/home/xwc` and `/home/xwc/vllm` owned by `xwc`; no output from the `sinfo`/`squeue` line
 (if there is any, stop: the scripts refuse to launch and must be adapted to the scheduler).
 Note the driver's CUDA version from `nvidia-smi` and the `nvcc` version.
 
 ## 2-4. Clone, environment, install
 
-Run PLAN 4.5 steps 2, 3 and 4 exactly as written there. Expected at the end of step 4:
-`ok: xwc, /home/xwc/my_projects/mini-sglang_dev, /home/xwc/envs/minisgl`, a successful
-`pip install -e ".[dev]" torch-c-dlpack-ext`, and a new `results/requirements.lock`
-(copy it down in step 11 and commit it locally; never commit on the server).
+Project root: `/home/xwc/vllm` (allocated by the administrator; replaces PLAN's
+`/home/xwc/my_projects`). Repo, `runs/` and `cache/` live under it; the Conda env stays at
+`/home/xwc/envs/minisgl`.
+
+```bash
+if [ "$(id -un)" = "xwc" ] && [ -d /home/xwc/vllm ] && [ -O /home/xwc/vllm ]; then cd /home/xwc/vllm && pwd; if [ -e mini-sglang_dev ]; then ls -ld mini-sglang_dev; echo "exists: inspect it, do not clone again"; else git clone https://github.com/jackwubupt-ops/mini-sglang_dev.git; fi; else echo "STOP: not xwc, or /home/xwc/vllm missing or not owned by xwc"; ls -ld /home/xwc/vllm; fi
+```
+```bash
+if [ "$(id -un)" != "xwc" ]; then echo "STOP: not xwc"; elif [ -e /home/xwc/envs/minisgl ]; then echo "env exists: inspect it, do not recreate"; else conda create -y -p /home/xwc/envs/minisgl python=3.12; fi
+```
+```bash
+conda activate /home/xwc/envs/minisgl && python -c "import sys; print(sys.prefix)"
+```
+```bash
+cd /home/xwc/vllm/mini-sglang_dev && scripts_ok=0; if [ -n "$(git status --porcelain)" ]; then echo "STOP: uncommitted changes on the server"; else git fetch origin && git switch tooling && git pull --ff-only origin tooling && if git diff --quiet 9a91cfa HEAD -- python/ pyproject.toml && scripts/check_env.sh; then scripts_ok=1; fi; fi; if [ "$scripts_ok" = 1 ]; then source scripts/env.sh && python -m pip install -e ".[dev]" torch-c-dlpack-ext && if [ -e results/requirements.lock ]; then echo "lock exists: not overwritten"; else python -m pip freeze > results/requirements.lock; fi; fi
+```
+
+Expected at the end: `ok: xwc, /home/xwc/vllm/mini-sglang_dev, /home/xwc/envs/minisgl`, a successful
+install, and a new `results/requirements.lock` (copy it down in step 11 and commit it locally;
+never commit on the server).
 
 Then make every script executable check pass and record the environment (no GPU used):
 
 ```bash
-cd /home/xwc/my_projects/mini-sglang_dev && scripts/check_env.sh && source scripts/env.sh && \
+cd /home/xwc/vllm/mini-sglang_dev && scripts/check_env.sh && source scripts/env.sh && \
   scripts/pick_gpu.sh && \
   python scripts/capture_env.py --gpu <GPU> --out "$RUNS/env-$(date +%Y%m%d-%H%M)/env.json"
 ```
@@ -130,7 +146,7 @@ then stop_server asks for confirmation.
 ## 10. R5 (H5) on `instr`
 
 ```bash
-cd /home/xwc/my_projects/mini-sglang_dev && \
+cd /home/xwc/vllm/mini-sglang_dev && \
 if [ -n "$(git status --porcelain)" ]; then echo "STOP: uncommitted changes on the server"; else
   git fetch origin && git switch instr && git pull --ff-only origin instr && \
   scripts/check_env.sh && git diff --stat origin/tooling HEAD -- python/; fi
@@ -151,10 +167,10 @@ afterwards with the same clean-tree guard.
 ## 11. Copy down and judge (locally, on your Mac)
 
 ```bash
-mkdir -p ~/mini-sglang/runs && rsync -av --ignore-existing xwc@ps:/home/xwc/my_projects/runs/ ~/mini-sglang/runs/
+mkdir -p ~/mini-sglang/runs && rsync -av --ignore-existing xwc@ps:/home/xwc/vllm/runs/ ~/mini-sglang/runs/
 ```
 ```bash
-mkdir -p ~/mini-sglang/results && rsync -av --ignore-existing xwc@ps:/home/xwc/my_projects/mini-sglang_dev/results/requirements.lock ~/mini-sglang/results/
+mkdir -p ~/mini-sglang/results && rsync -av --ignore-existing xwc@ps:/home/xwc/vllm/mini-sglang_dev/results/requirements.lock ~/mini-sglang/results/
 ```
 ```bash
 cd ~/mini-sglang && python3 scripts/repro/r1_judge.py runs/r1-on-*/r1_client.json runs/r1-off-*/r1_client.json

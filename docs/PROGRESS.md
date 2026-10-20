@@ -32,3 +32,12 @@ Judgement calls to review:
 - R1/R4/R5 count a request as EOS-terminated from the token/event count, not a server flag.
 
 Next: you review and push (docs/week1-server.md step 0), then run steps 1-10 on `ps`.
+
+## 2026-10-20 — Server path correction
+
+The administrator allocated `/home/xwc/vllm` as the project root on `ps`; it replaces PLAN's
+`/home/xwc/my_projects` (policy wins over the plan, PLAN 0). Repo `/home/xwc/vllm/mini-sglang_dev`,
+`RUNS=/home/xwc/vllm/runs`, caches `/home/xwc/vllm/cache/*`, disk check on `/home/xwc/vllm`.
+The Conda env stays at `/home/xwc/envs/minisgl`. check_env.sh now compares physical paths (symlink-safe).
+docs/PLAN.md is unchanged; read its `/home/xwc/my_projects` as `/home/xwc/vllm`.
+Verified locally: shellcheck clean, dry-run refusals unchanged, tests/tooling 12 passed (tooling branch).
