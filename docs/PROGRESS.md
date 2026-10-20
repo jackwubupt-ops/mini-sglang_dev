@@ -41,3 +41,22 @@ The administrator allocated `/home/xwc/vllm` as the project root on `ps`; it rep
 The Conda env stays at `/home/xwc/envs/minisgl`. check_env.sh now compares physical paths (symlink-safe).
 docs/PLAN.md is unchanged; read its `/home/xwc/my_projects` as `/home/xwc/vllm`.
 Verified locally: shellcheck clean, dry-run refusals unchanged, tests/tooling 12 passed (tooling branch).
+
+## 2026-10-20 — Windows-mediated deployment (ps has no GitHub access)
+
+Reported by the user: on `ps`, `git clone` from GitHub fails (`gnutls_handshake() failed`) and
+`curl -I` gets `200 Connection established` then `unexpected eof`; cause unconfirmed.
+Changes (tooling, merged into instr):
+- docs/week1-server.md rewritten: Mac push → Windows bare mirror → `git bundle` + sha256 + refs file
+  → scp to /home/xwc/vllm/transfer → verified first clone on ps; results return as a tar.gz + sha256
+  from /home/xwc/vllm/outbox through Windows to the Mac (extracted with `tar -k`, never overwriting).
+  Added a read-only connectivity check for Conda, PyPI and Hugging Face, and conditional fallbacks:
+  wheelhouse built on Windows (uv resolve for Linux, pip download) and model copy from Windows.
+- scripts/sync_from_bundle.sh: later updates on ps (sha256, refs file, git bundle verify, fsck,
+  clean tree, upstream/baseline-v1 at 9a91cfa, fast-forward only, tags never moved).
+- smoke.sh reads --model-path from run_meta.txt (so a local model directory works).
+Verified locally: shellcheck clean; bundle flow simulated with a bare "fork" and mirror — first
+clone, fast-forward update, refusal of a corrupted bundle, a rewritten (non-ff) branch and a path
+outside transfer/; tests/tooling 12 passed. Not verified: every PowerShell block (no PowerShell
+here), anything on ps, the wheelhouse and model fallbacks.
+Open question: whether ps can reach Conda/PyPI/Hugging Face (runbook step 1 decides).
