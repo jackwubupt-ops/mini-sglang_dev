@@ -10,7 +10,7 @@ scripts/check_env.sh
 # shellcheck source=scripts/env.sh
 source scripts/env.sh
 DRY_RUN=${DRY_RUN:-0}
-OWNER=xwc
+OWNER=$MINISGL_OWNER   # from host_profile.sh via env.sh
 
 die() { echo "REFUSED: $*" >&2; exit 1; }
 [ $# -eq 1 ] || { echo "usage: $0 RUN_ID" >&2; exit 2; }
