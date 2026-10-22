@@ -46,6 +46,7 @@ id_ed25519*
 .claude/
 .codex/
 runs/
+rental/
 cache/
 .cache/
 *.safetensors

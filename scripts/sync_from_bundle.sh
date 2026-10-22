@@ -16,7 +16,7 @@ scripts/check_env.sh
 source scripts/env.sh
 
 BASELINE=9a91cfafe754aa85daee49998176275667eb58f2
-TRANSFER=/home/xwc/vllm/transfer
+TRANSFER=$MINISGL_ROOT/transfer
 DRY_RUN=${DRY_RUN:-0}
 die() { echo "REFUSED: $*" >&2; exit 1; }
 

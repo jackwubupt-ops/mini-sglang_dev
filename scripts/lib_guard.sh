@@ -2,9 +2,9 @@
 # scripts/lib_guard.sh -- shared pre-launch guardrails for serve.sh and run_offline.sh.
 # Sourced only by those scripts, after `set -euo pipefail`, check_env.sh and env.sh.
 
-OWNER=xwc
+OWNER=$MINISGL_OWNER   # from host_profile.sh via env.sh
 MIN_FREE_GIB=20
-DATA_ROOT=/home/xwc/vllm   # repo, runs and caches live here
+DATA_ROOT=$MINISGL_ROOT   # repo, runs and caches live here
 DRY_RUN=${DRY_RUN:-0}
 
 die() { echo "REFUSED: $*" >&2; exit 1; }
@@ -64,12 +64,13 @@ guard_gpu() {
 guard_port() {
   local port=$1 p
   [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1024 ] && [ "$port" -le 65534 ] || die "PORT must be 1024..65534"
-  if ! have ss; then
-    [ "$DRY_RUN" = 1 ] && { echo "DRY-RUN: ss not found, skipping port check"; return; }
-    die "ss not found"
-  fi
   for p in "$port" $((port + 1)); do
-    if [ -n "$(ss -ltnH "sport = :$p")" ]; then die "port $p is in use (the server needs PORT and PORT+1)"; fi
+    if have ss; then
+      if [ -n "$(ss -ltnH "sport = :$p")" ]; then die "port $p is in use (the server needs PORT and PORT+1)"; fi
+    # minimal images without iproute2: a successful local connect means something listens
+    elif (exec 3<> "/dev/tcp/127.0.0.1/$p") 2> /dev/null; then
+      die "port $p is in use (the server needs PORT and PORT+1)"
+    fi
   done
 }
 

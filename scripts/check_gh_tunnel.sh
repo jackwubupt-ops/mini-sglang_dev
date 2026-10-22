@@ -12,7 +12,9 @@ set -uo pipefail
 PROXY=http://127.0.0.1:17897
 PROXY_PORT=17897
 FORK=https://github.com/jackwubupt-ops/mini-sglang_dev.git
-OWNER=xwc
+# shellcheck source=scripts/host_profile.sh
+source "$(dirname "$0")/host_profile.sh" || exit 1
+OWNER=$MINISGL_OWNER
 fail() { echo "STOP: $*" >&2; exit 1; }
 
 [ "$(id -un)" = "$OWNER" ] || fail "run as $OWNER, not $(id -un)"

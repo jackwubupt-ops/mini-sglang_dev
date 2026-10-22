@@ -117,3 +117,17 @@ Those kernels are compiled with `-std=c++20` and use std::source_location/std::s
 nvcc 11.8 has no C++20 mode, so unmodified code is expected to fail at CP3/CP6. FlashInfer 0.5.3 JIT
 with nvcc 11.8 is untested (CP5). CUDA 12 needs driver >= 525.60.13; forward compat (CP2) is expected
 to return error 804 on GeForce. Scripts compile locally; none has run on a GPU.
+
+## 2026-10-22 — Rented CUDA 12 GPU as the execution host (quick track)
+
+User decision: rent a 24 GB CUDA 12 GPU and run environment, smoke, golden outputs and R1/R4/R5 there
+first. The branch `quick-mixed` (4-day plan) is abandoned by the user; it is not merged anywhere.
+- scripts/host_profile.sh: `MINISGL_HOST=ps` (default, unchanged values) or `rental` (root = parent of
+  the checkout, owner = current user, env = <root>/envs/minisgl; refused on hostname ps). check_env.sh,
+  env.sh, lib_guard.sh, stop_server.sh, check_gh_tunnel.sh, sync_from_bundle.sh read it.
+- lib_guard.sh guard_port falls back to a /dev/tcp connect test when `ss` is missing (minimal images).
+- docs/rental-day1.md: rental requirements (1x24 GB Ampere/Ada, driver >= 570, CUDA 12.8 devel image,
+  >= 100 GB disk) and day-1 commands D1-D13, results back through Windows with sha256.
+Verified locally: shellcheck clean; ps profile values unchanged (dry run); rental profile end to end
+on macOS with stubs (start, busy PORT and PORT+1 refused via /dev/tcp, confirmed stop, offline job);
+tests/tooling 12 passed. Not verified on any rental machine.
